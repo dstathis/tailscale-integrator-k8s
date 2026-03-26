@@ -1,0 +1,48 @@
+type: charm
+name: tailscale-integrator-k8s
+#license: AGPL-3.0-only
+title: Charm Template
+summary: Integrator charm for tailscale.
+description: |
+  Add k8s charms to your tailnet. Integrates over the ingress relation.
+  Also supports the service-mesh relation to work alongside a service mesh.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+  arm64:
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+
+config:
+  options:
+    tailscale-namespace:
+      type: string
+      default: tailscale
+      description: Namespace containing Tailscale resources.
+
+provides:
+  ingress:
+    interface: ingress
+    optional: true
+  provide-cmr-mesh:
+    interface: cross_model_mesh
+    description: |
+      This charm does NOT support cross-model relations. Please do not use this interface.
+    optional: true
+
+requires:
+  service-mesh:
+    interface: service_mesh
+    limit: 1
+    optional: true
+  require-cmr-mesh:
+    interface: cross_model_mesh
+    description: |
+      This charm does NOT support cross-model relations. Please do not use this interface.
+    optional: true

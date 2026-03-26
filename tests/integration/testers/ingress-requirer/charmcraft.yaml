@@ -1,0 +1,22 @@
+type: charm
+name: ingress-requirer
+summary: Test charm that requires ingress
+description: |
+  Minimal test charm that requires the ingress interface and sets port
+  in its application relation data. Used for integration testing only.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+
+requires:
+  ingress:
+    interface: ingress
+    limit: 1
