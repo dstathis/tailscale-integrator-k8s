@@ -1,7 +1,7 @@
 type: charm
 name: tailscale-integrator-k8s
 #license: AGPL-3.0-only
-title: Charm Template
+title: Tailscale Integrator for Kubernetes
 summary: Integrator charm for tailscale.
 description: |
   Add k8s charms to your tailnet. Integrates over the ingress relation.
