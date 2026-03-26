@@ -12,17 +12,20 @@ source venv/bin/activate
 
 ## Testing
 
-This project uses `tox` for managing test environments. There are some pre-configured environments
-that can be used for linting and formatting code when you're preparing contributions to the charm:
+This project uses `tox` for managing test environments. The following environments are available:
 
 ```shell
 tox run -e format        # update your code according to linting rules
-tox run -e lint          # code style
-tox run -e static        # static type checking
+tox run -e lint          # code style and static type checking
 tox run -e unit          # unit tests
 tox run -e integration   # integration tests
-tox                      # runs 'format', 'lint', 'static', and 'unit' environments
+tox                      # runs 'format', 'lint', and 'unit' environments
 ```
+
+Integration tests require a Juju controller with a Kubernetes cloud and use the
+[Jubilant](https://documentation.ubuntu.com/jubilant/) library. You can point the tests at a
+pre-built charm file by setting the `CHARM_PATH` environment variable; otherwise the tests
+look for a `.charm` file in the project directory.
 
 ## Build the charm
 
@@ -35,5 +38,3 @@ charmcraft pack
 ## License
 
 By contributing to this project, you agree that your contributions are licensed under the GNU Affero General Public License v3.0 only. See [LICENSE](LICENSE).
-
-<!-- You may want to include any contribution/style guidelines in this document>
