@@ -17,6 +17,7 @@
 
 """Tailscale Integrator for Kubernetes."""
 
+import json
 import logging
 
 import ops
@@ -122,6 +123,7 @@ class TailscaleIntegratorK8SCharm(ops.CharmBase):
                         ).model_dump(by_alias=True, exclude_unset=True, exclude_none=True),
                     )
                 )
+            rel.data[self.app]["ingress"] = json.dumps({"url": f"http://{app_name}"})
         lightkube_client = Client(namespace=self.model.name, field_manager=self.app.name)
         resource_types: set[type] = {Service}
         if mesh_type == "istio":

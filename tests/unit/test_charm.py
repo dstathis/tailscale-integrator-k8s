@@ -405,3 +405,55 @@ def test_reconcile_istio_auth_policy_port_matches():
         assert port_rule == ["9999"]
     finally:
         _stop_patches(patchers)
+
+
+def test_reconcile_sets_ingress_url():
+    """The charm writes ingress URL data back to the relation for every ingress requirer."""
+    _, mock_krm, patchers = _apply_patches()
+    try:
+        ctx = _ctx()
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(leader=True, relations={ingress_rel})
+        state_out = ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        assert state_out.unit_status == testing.ActiveStatus()
+        ingress_out = state_out.get_relation(ingress_rel.id)
+        assert "ingress" in ingress_out.local_app_data
+        ingress_data = json.loads(ingress_out.local_app_data["ingress"])
+        assert ingress_data == {"url": "http://my-webapp"}
+    finally:
+        _stop_patches(patchers)
+
+
+def test_reconcile_sets_ingress_url_with_istio():
+    """The ingress URL is also written when an Istio service mesh is present."""
+    _, mock_krm, patchers = _apply_patches()
+    try:
+        ctx = _ctx()
+        mesh_rel = testing.Relation(
+            endpoint="service-mesh",
+            remote_app_name="istio-beacon",
+            remote_app_data={
+                "labels": json.dumps({"istio-injection": "enabled"}),
+                "mesh_type": json.dumps("istio"),
+            },
+        )
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(leader=True, relations={mesh_rel, ingress_rel})
+        state_out = ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        assert state_out.unit_status == testing.ActiveStatus()
+        ingress_out = state_out.get_relation(ingress_rel.id)
+        assert "ingress" in ingress_out.local_app_data
+        ingress_data = json.loads(ingress_out.local_app_data["ingress"])
+        assert ingress_data == {"url": "http://my-webapp"}
+    finally:
+        _stop_patches(patchers)
