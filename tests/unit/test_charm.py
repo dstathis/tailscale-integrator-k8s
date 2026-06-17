@@ -317,6 +317,44 @@ def test_reconcile_unsupported_mesh_type_blocks():
         _stop_patches(patchers)
 
 
+def test_krm_ownership_is_scoped_to_instance():
+    """KRM ownership label and field_manager include the model name.
+
+    Regression test: KubernetesResourceManager.reconcile() lists existing resources
+    across all namespaces (namespace="*") filtered only by these labels, and deletes
+    anything not in the desired set. If the ownership selector were just the app name,
+    every instance of this charm on the cluster (e.g. the same charm in two different
+    models) would share it, and each instance would garbage-collect the others'
+    LoadBalancer Services. Scoping ownership to "{app}-{model}" keeps each instance's
+    GC confined to its own resources.
+    """
+    mock_client, _, patchers = _apply_patches()
+    try:
+        ctx = _ctx()
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(
+            leader=True,
+            relations={ingress_rel},
+            model=testing.Model(name="prod"),
+        )
+        ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        # The KRM was constructed with an instance-scoped ownership label.
+        import charm as charm_module
+
+        labels = charm_module.KubernetesResourceManager.call_args.kwargs["labels"]
+        assert labels == {"krm_owner": "tailscale-integrator-k8s-prod"}, labels
+
+        # The lightkube Client uses an instance-scoped field_manager too.
+        assert mock_client.call_args.kwargs["field_manager"] == "tailscale-integrator-k8s-prod"
+    finally:
+        _stop_patches(patchers)
+
+
 def test_reconcile_relation_broken_removes_objects():
     """After relation-broken, KRM reconcile is called without the departed app's objects."""
     _, mock_krm, patchers = _apply_patches()

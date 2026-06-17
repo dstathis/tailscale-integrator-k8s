@@ -124,12 +124,21 @@ class TailscaleIntegratorK8SCharm(ops.CharmBase):
                     )
                 )
             rel.data[self.app]["ingress"] = json.dumps({"url": f"http://{app_name}"})
-        lightkube_client = Client(namespace=self.model.name, field_manager=self.app.name)
+        # Scope ownership to this specific charm instance, not just the app name.
+        # get_deployed_resources() lists across all namespaces (namespace="*") and
+        # reconcile() deletes anything carrying these labels that isn't in the desired
+        # set. The app name alone is identical for every instance of this charm on the
+        # cluster (e.g. the same charm in a "prod" and a "staging" model), so a bare
+        # {"krm_owner": app} selector makes each instance garbage-collect the other
+        # instances' Services. Including the model name makes the selector unique per
+        # instance (namespaces, and therefore model names, are unique within a cluster).
+        instance_id = f"{self.app.name}-{self.model.name}"
+        lightkube_client = Client(namespace=self.model.name, field_manager=instance_id)
         resource_types: set[type] = {Service}
         if mesh_type == "istio":
             resource_types.add(AuthorizationPolicy)
         krm = KubernetesResourceManager(
-            labels={"krm_owner": self.app.name},
+            labels={"krm_owner": instance_id},
             lightkube_client=lightkube_client,
             logger=logger,
             resource_types=resource_types,
