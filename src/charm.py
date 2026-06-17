@@ -55,6 +55,14 @@ class TailscaleIntegratorK8SCharm(ops.CharmBase):
 
     def reconcile(self, _):
         """Reconcile the charm."""
+        if not self.unit.is_leader():
+            # Everything reconciled here is application-global: the ingress relation
+            # application databag and cluster-shared Kubernetes resources (managed under a
+            # single field manager). Only the leader may write application relation data,
+            # and having every unit manage the same Kubernetes resources would just race.
+            # Non-leader units have nothing to do but report status.
+            self.unit.status = ops.ActiveStatus()
+            return
         k8s_objects = []
         if mesh_type := self.mesh.mesh_type():
             if mesh_type != "istio":

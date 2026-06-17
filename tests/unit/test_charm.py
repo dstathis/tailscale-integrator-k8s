@@ -495,3 +495,30 @@ def test_reconcile_sets_ingress_url_with_istio():
         assert ingress_data == {"url": "http://my-webapp"}
     finally:
         _stop_patches(patchers)
+
+
+def test_non_leader_does_not_manage_resources_or_write_app_data():
+    """A non-leader unit skips reconcile: no KRM calls, no app databag writes.
+
+    Regression test: the reconcile manages application-global state (the ingress
+    relation application databag and cluster-shared Kubernetes resources). Writing
+    application relation data raises on a non-leader unit, so non-leaders must no-op
+    and simply report active status.
+    """
+    _, mock_krm, patchers = _apply_patches()
+    try:
+        ctx = _ctx()
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(leader=False, relations={ingress_rel})
+        state_out = ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        assert state_out.unit_status == testing.ActiveStatus()
+        mock_krm.reconcile.assert_not_called()
+        ingress_out = state_out.get_relation(ingress_rel.id)
+        assert "ingress" not in ingress_out.local_app_data
+    finally:
+        _stop_patches(patchers)
