@@ -15,6 +15,7 @@
 # See LICENSE file for licensing details.
 
 import json
+from typing import cast
 from unittest.mock import MagicMock, PropertyMock, patch
 
 from ops import testing
@@ -346,7 +347,8 @@ def test_krm_ownership_is_scoped_to_instance():
         # The KRM was constructed with an instance-scoped ownership label.
         import charm as charm_module
 
-        labels = charm_module.KubernetesResourceManager.call_args.kwargs["labels"]
+        krm_cls = cast(MagicMock, charm_module.KubernetesResourceManager)
+        labels = krm_cls.call_args.kwargs["labels"]
         assert labels == {"krm_owner": "tailscale-integrator-k8s-prod"}, labels
 
         # The lightkube Client uses an instance-scoped field_manager too.
@@ -545,10 +547,12 @@ def test_authorization_policy_garbage_collected_when_crd_present():
         state_in = testing.State(leader=True, relations={ingress_rel})
         ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
 
-        import charm as charm_module
         from lightkube_extensions.types import AuthorizationPolicy
 
-        resource_types = charm_module.KubernetesResourceManager.call_args.kwargs["resource_types"]
+        import charm as charm_module
+
+        krm_cls = cast(MagicMock, charm_module.KubernetesResourceManager)
+        resource_types = krm_cls.call_args.kwargs["resource_types"]
         assert AuthorizationPolicy in resource_types
     finally:
         _stop_patches(patchers)
@@ -578,11 +582,13 @@ def test_authorization_policy_not_in_scope_when_crd_absent():
 
         assert state_out.unit_status == testing.ActiveStatus()
 
-        import charm as charm_module
         from lightkube.resources.core_v1 import Service
         from lightkube_extensions.types import AuthorizationPolicy
 
-        resource_types = charm_module.KubernetesResourceManager.call_args.kwargs["resource_types"]
+        import charm as charm_module
+
+        krm_cls = cast(MagicMock, charm_module.KubernetesResourceManager)
+        resource_types = krm_cls.call_args.kwargs["resource_types"]
         assert AuthorizationPolicy not in resource_types
         assert resource_types == {Service}
     finally:
