@@ -31,9 +31,10 @@ from charmed_service_mesh_helpers.models import (
     WorkloadSelector,
 )
 from charms.istio_beacon_k8s.v0.service_mesh import ServiceMeshConsumer
-from lightkube import Client
+from lightkube import ApiError, Client
 from lightkube.models.core_v1 import ServicePort, ServiceSpec
 from lightkube.models.meta_v1 import ObjectMeta
+from lightkube.resources.apiextensions_v1 import CustomResourceDefinition
 from lightkube.resources.core_v1 import Service
 from lightkube_extensions.batch import KubernetesResourceManager
 from lightkube_extensions.types import AuthorizationPolicy
@@ -143,7 +144,13 @@ class TailscaleIntegratorK8SCharm(ops.CharmBase):
         instance_id = f"{self.app.name}-{self.model.name}"
         lightkube_client = Client(namespace=self.model.name, field_manager=instance_id)
         resource_types: set[type] = {Service}
-        if mesh_type == "istio":
+        # Garbage-collect AuthorizationPolicies whenever the CRD exists, not only when a
+        # mesh is currently related. Otherwise, when the service-mesh relation breaks,
+        # mesh_type becomes None, AuthorizationPolicy drops out of the reconcile scope, and
+        # the policies created earlier are never deleted (they leak). The CRD only exists
+        # when Istio is installed, so this also avoids the KRM raising on a 404 when listing
+        # a resource type that the cluster has never heard of.
+        if self._authorization_policy_crd_exists(lightkube_client):
             resource_types.add(AuthorizationPolicy)
         krm = KubernetesResourceManager(
             labels={"krm_owner": instance_id},
@@ -153,6 +160,17 @@ class TailscaleIntegratorK8SCharm(ops.CharmBase):
         )
         krm.reconcile(k8s_objects)
         self.model.unit.status = ops.ActiveStatus()
+
+    @staticmethod
+    def _authorization_policy_crd_exists(client: Client) -> bool:
+        """Return whether the Istio AuthorizationPolicy CRD is registered in the cluster."""
+        try:
+            client.get(CustomResourceDefinition, "authorizationpolicies.security.istio.io")
+        except ApiError as e:
+            if e.status.code == 404:
+                return False
+            raise
+        return True
 
 
 if __name__ == "__main__":  # pragma: nocover

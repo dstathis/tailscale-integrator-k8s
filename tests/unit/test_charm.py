@@ -522,3 +522,68 @@ def test_non_leader_does_not_manage_resources_or_write_app_data():
         assert "ingress" not in ingress_out.local_app_data
     finally:
         _stop_patches(patchers)
+
+
+def test_authorization_policy_garbage_collected_when_crd_present():
+    """AuthorizationPolicy is in the GC scope whenever its CRD exists, even with no mesh.
+
+    Regression test: when the service-mesh relation breaks, mesh_type() becomes None and
+    no AuthorizationPolicy is added to the desired objects. If AuthorizationPolicy were
+    only in the KRM's resource_types while a mesh is related, policies created earlier
+    would never be reconciled away and would leak. Keeping them in scope whenever the CRD
+    exists lets the KRM delete the orphans.
+    """
+    mock_client, _, patchers = _apply_patches()
+    # Default mock: client.get(CRD) succeeds -> CRD is considered present.
+    try:
+        ctx = _ctx()
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(leader=True, relations={ingress_rel})
+        ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        import charm as charm_module
+        from lightkube_extensions.types import AuthorizationPolicy
+
+        resource_types = charm_module.KubernetesResourceManager.call_args.kwargs["resource_types"]
+        assert AuthorizationPolicy in resource_types
+    finally:
+        _stop_patches(patchers)
+
+
+def test_authorization_policy_not_in_scope_when_crd_absent():
+    """Without the Istio CRD, AuthorizationPolicy is left out of the GC scope.
+
+    The KRM lists each resource type across the cluster and raises on a 404; listing a
+    resource type whose CRD was never installed would break reconcile entirely. So when
+    the CRD is absent (no Istio), only Service is reconciled.
+    """
+    from lightkube import ApiError
+
+    mock_client, _, patchers = _apply_patches()
+    not_found = ApiError(status={"code": 404, "message": "not found", "status": "Failure"})
+    mock_client.return_value.get.side_effect = not_found
+    try:
+        ctx = _ctx()
+        ingress_rel = testing.Relation(
+            endpoint="ingress",
+            remote_app_name="my-webapp",
+            remote_app_data={"port": "8080"},
+        )
+        state_in = testing.State(leader=True, relations={ingress_rel})
+        state_out = ctx.run(ctx.on.relation_changed(ingress_rel), state_in)
+
+        assert state_out.unit_status == testing.ActiveStatus()
+
+        import charm as charm_module
+        from lightkube.resources.core_v1 import Service
+        from lightkube_extensions.types import AuthorizationPolicy
+
+        resource_types = charm_module.KubernetesResourceManager.call_args.kwargs["resource_types"]
+        assert AuthorizationPolicy not in resource_types
+        assert resource_types == {Service}
+    finally:
+        _stop_patches(patchers)
